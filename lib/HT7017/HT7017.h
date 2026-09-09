@@ -30,6 +30,13 @@ enum class Reg : uint8_t {
   ZCrossU = 0x35, ZCrossI = 0x6C,
 };
 
+struct RawReadings {
+  uint32_t u, i1, i2;
+  uint32_t p1, p2, q1, q2, s;
+  uint32_t freq;
+  uint32_t ep, eq;
+};
+
 struct Readings {
   float u;       // V
   float i1, i2;  // A
@@ -66,13 +73,6 @@ class HT7017 {
 
   bool _txRx(const uint8_t* tx, uint8_t tx_len,
              uint8_t* rx, uint8_t rx_len, uint32_t timeout_ms);
-};
-
-struct RawReadings {
-  uint32_t u, i1, i2;
-  uint32_t p1, p2, q1, q2, s;
-  uint32_t freq;
-  uint32_t ep, eq;
 };
 
 }  // namespace ht7017

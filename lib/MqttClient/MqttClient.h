@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <WiFiClient.h>
 #include <PubSubClient.h>
 #include <functional>
 
@@ -25,7 +26,7 @@ class Client {
   // Set callback for incoming commands
   void onCmd(CmdHandler h) { _onCmd = h; }
 
-  bool connected() const { return _pubsub.connected(); }
+  bool connected() { return _pubsub.connected(); }
 
  private:
   Client() = default;

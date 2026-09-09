@@ -11,7 +11,7 @@ namespace {
     switch (uart_no) {
       case 0: return &Serial;
       case 1: return &Serial1;
-      case 2: return &Serial2;
+      case 2: return nullptr;     // ESP32-C3 has no Serial2; explicit fail
       default: return nullptr;
     }
   }
