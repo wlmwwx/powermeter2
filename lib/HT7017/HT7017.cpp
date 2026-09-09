@@ -4,8 +4,7 @@
 namespace ht7017 {
 
 namespace {
-  constexpr uint8_t CMD_HEAD = 0x16;
-  constexpr uint8_t RX_HEAD  = 0x81;
+  constexpr uint8_t FRAME_HEAD = 0x6A;
 
   // Singleton map from uart_no (0..2) to HardwareSerial*
   HardwareSerial* serialFor(uint8_t uart_no) {
@@ -59,16 +58,15 @@ bool HT7017::_txRx(const uint8_t* tx, uint8_t tx_len,
   }
 
   if (pos != rx_len) return false;
-  if (rx[0] != RX_HEAD) return false;
+  if (rx[0] != FRAME_HEAD) return false;
   if (!checksumOk(rx, rx_len)) return false;
 
   return true;
 }
 
 bool HT7017::read24(Reg r, uint32_t* out) {
-  // TX: head(0x16) + read cmd (0x01 << 1 | 0x00).  See datasheet §5.2.
-  // Protocol: TX 2 bytes, RX 6 bytes (head + cmd_echo + data2 + data1 + data0 + checksum).
-  uint8_t tx[2] = { CMD_HEAD, static_cast<uint8_t>(static_cast<uint8_t>(r) << 1) };
+  // TX: head(0x6A) + read cmd (WR=0, ADDR=reg).  RX 6 bytes (head + cmd_echo + data2 + data1 + data0 + checksum).
+  uint8_t tx[2] = { FRAME_HEAD, static_cast<uint8_t>(r) & 0x7F };
   uint8_t rx[6];
   if (!_txRx(tx, sizeof(tx), rx, sizeof(rx), 500)) return false;
 
@@ -80,8 +78,8 @@ bool HT7017::read24(Reg r, uint32_t* out) {
 }
 
 bool HT7017::read16(Reg r, uint16_t* out) {
-  // TX: head(0x16) + read cmd (0x01 << 1 | 0x00).  RX 5 bytes.
-  uint8_t tx[2] = { CMD_HEAD, static_cast<uint8_t>(static_cast<uint8_t>(r) << 1) };
+  // TX: head(0x6A) + read cmd (WR=0, ADDR=reg).  RX 5 bytes.
+  uint8_t tx[2] = { FRAME_HEAD, static_cast<uint8_t>(r) & 0x7F };
   uint8_t rx[5];
   if (!_txRx(tx, sizeof(tx), rx, sizeof(rx), 500)) return false;
 
@@ -90,16 +88,16 @@ bool HT7017::read16(Reg r, uint16_t* out) {
 }
 
 bool HT7017::write16(Reg r, uint16_t value) {
-  // TX: head(0x16) + write cmd (0x01 << 1 | 0x01) + data1 + data0.  RX 3 bytes.
+  // TX: head(0x6A) + write cmd (WR=1, ADDR=reg) + data1 + data0.  RX 1 byte (ACK: 0x54 ok, 0x63 bad).
   uint8_t tx[4] = {
-    CMD_HEAD,
-    static_cast<uint8_t>((static_cast<uint8_t>(r) << 1) | 0x01),
+    FRAME_HEAD,
+    static_cast<uint8_t>(r) | 0x80,
     static_cast<uint8_t>(value >> 8),
     static_cast<uint8_t>(value & 0xFF)
   };
-  uint8_t rx[3];
+  uint8_t rx[1];
   if (!_txRx(tx, sizeof(tx), rx, sizeof(rx), 500)) return false;
-  return true;
+  return rx[0] == 0x54;
 }
 
 bool HT7017::readAll(RawReadings* out) {
