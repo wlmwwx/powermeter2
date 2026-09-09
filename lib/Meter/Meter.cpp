@@ -8,10 +8,17 @@ void Meter::begin(ht7017::HT7017* chip, const CaliParams& cali) {
   _cali = cali;
 }
 
-void Meter::resetEnergy() {
+void Meter::resetEnergy(Data* out) {
   // Energy is added each update() from raw pulses; resetting requires
   // also clearing chip EnergyP/EnergyQ (which auto-clears on read if EnergyClr=1).
   // Caller (WebServer/CLI) is responsible for sending EMUCFG.EnergyClr command.
+  _last_update_ms = 0;
+  if (out) {
+    out->ch1.ep_kwh = 0;
+    out->ch1.eq_kvarh = 0;
+    out->ch2.ep_kwh = 0;
+    out->ch2.eq_kvarh = 0;
+  }
 }
 
 float Meter::toSigned(int32_t v24) {
@@ -60,14 +67,21 @@ bool Meter::update(Data* out) {
   out->ch1.pf = (out->ch1.s > 0) ? (out->ch1.p / out->ch1.s) : 0;
   out->ch2.pf = (out->ch2.s > 0) ? (out->ch2.p / out->ch2.s) : 0;
 
-  // Energy accumulation (raw pulses -> kWh)
-  // kWh = pulses / EC where EC = pulses/kWh
+  // Energy accumulation
+  // Ch1: raw pulses from chip -> kWh
   double d_ep1 = (double)raw.ep / _cali.ec;
   double d_eq1 = (double)raw.eq / _cali.ec;
   out->ch1.ep_kwh += d_ep1;
   out->ch1.eq_kvarh += d_eq1;
-  // Channel 2 energy: not separately provided by chip; user can compute from p2
-  // For now leave ch2 ep_kwh to be summed from ch2 power in a future task.
+
+  // Ch2: watt-second integration over time
+  uint32_t now_ms = millis();
+  uint32_t dt_ms = (_last_update_ms != 0) ? (now_ms - _last_update_ms) : 0;
+  _last_update_ms = now_ms;
+  if (dt_ms > 0 && dt_ms < 10000) {  // ignore first call + huge gaps
+    out->ch2.ep_kwh   += (double)out->ch2.p * (double)dt_ms / 3600000.0;
+    out->ch2.eq_kvarh += (double)out->ch2.q * (double)dt_ms / 3600000.0;
+  }
 
   return true;
 }

@@ -48,11 +48,12 @@ class Meter {
   void setCali(const CaliParams& c) { _cali = c; }
 
   // Reset accumulated energy (e.g. on factory reset)
-  void resetEnergy();
+  void resetEnergy(Data* out);
 
  private:
   ht7017::HT7017* _chip = nullptr;
   CaliParams _cali;
+  uint32_t _last_update_ms = 0;  // for ch2 watt-second integration
 
   // Helpers
   static float toSigned(int32_t v24);  // 24-bit two's complement
