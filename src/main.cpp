@@ -7,14 +7,14 @@
 #include <EnergyStore.h>
 #include <Provisioning.h>
 #include <MqttClient.h>
+#include <Display.h>
+#include <NavKey.h>
 
-// Pin map (adjust to your board)
+// Pin map
 static const int8_t PIN_HT7017_RX = 20;  // ESP32-C3 RX
 static const int8_t PIN_HT7017_TX = 21;
-static const int8_t PIN_LED      = 8;
-static const int8_t PIN_RELAY1   = 2;
-static const int8_t PIN_RELAY2   = 3;
-static const int8_t PIN_KEY      = 9;
+static const int8_t PIN_RELAY1    = 12;
+static const int8_t PIN_RELAY2    = 18;
 
 ht7017::HT7017 chip;
 meter::Meter meterObj;
@@ -24,7 +24,11 @@ bool ch1Relay = true, ch2Relay = true;
 
 uint32_t lastMeterUpdateMs = 0;
 uint32_t lastEnergySaveMs  = 0;
-uint32_t keyPressedAtMs    = 0;
+
+enum class UiState { Home, Menu };
+UiState uiState = UiState::Home;
+int menuSel = 0;
+bool firstRender = true;
 
 void onMqttCmd(const String& payload) {
   JsonDocument doc;
@@ -56,10 +60,8 @@ void initDeviceId() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_RELAY1, OUTPUT); digitalWrite(PIN_RELAY1, HIGH);
   pinMode(PIN_RELAY2, OUTPUT); digitalWrite(PIN_RELAY2, HIGH);
-  pinMode(PIN_KEY, INPUT_PULLUP);
 
   cfg::Config::instance().begin();
   initDeviceId();
@@ -79,18 +81,40 @@ void setup() {
   mqtt::Client::instance().begin();
   mqtt::Client::instance().onCmd(onMqttCmd);
   mqtt::Client::instance().publishAvailability(true);
+
+  display::Display::instance().begin();
+  display::Display::instance().setBacklight(true);
+  nav::NavKey::instance().begin();
+  display::Display::instance().renderSplash();
 }
 
 void loop() {
   web::Provisioning::instance().loop();
   mqtt::Client::instance().loop();
+  nav::NavKey::instance().loop();
 
-  // Meter
+  // OkUpLong: factory reset from any state
+  if (nav::NavKey::instance().okUpLong()) {
+    cfg::Config::instance().factoryReset();
+    ESP.restart();
+  }
+
+  // Meter + display update once per second
   if (millis() - lastMeterUpdateMs > 1000) {
     lastMeterUpdateMs = millis();
+
     if (meterObj.update(&lastData)) {
       Serial.printf("U=%.1fV I1=%.3fA P1=%.2fW PF1=%.3f EP1=%.3fkWh\n",
                     lastData.ch1.u, lastData.ch1.i, lastData.ch1.p, lastData.ch1.pf, lastData.ch1.ep_kwh);
+    }
+
+    if (firstRender) {
+      firstRender = false;
+      uiState = UiState::Home;
+    }
+
+    if (uiState == UiState::Home) {
+      display::Display::instance().renderHome(lastData, ch1Relay, ch2Relay);
     }
   }
 
@@ -110,25 +134,81 @@ void loop() {
     es::EnergyStore::save(s);
   }
 
-  // Key: long-press >5s = factory reset
-  if (digitalRead(PIN_KEY) == LOW) {
-    if (keyPressedAtMs == 0) keyPressedAtMs = millis();
-    else if (millis() - keyPressedAtMs > 5000) {
-      cfg::Config::instance().factoryReset();
-      ESP.restart();
+  // UI state machine
+  if (uiState == UiState::Home) {
+    if (nav::NavKey::instance().okPressed()) {
+      uiState = UiState::Menu;
+      menuSel = 0;
     }
-  } else {
-    keyPressedAtMs = 0;
-  }
+  } else if (uiState == UiState::Menu) {
+    if (nav::NavKey::instance().upPressed()) {
+      menuSel--;
+      if (menuSel < 0) menuSel = 0;
+    }
+    if (nav::NavKey::instance().downPressed()) {
+      menuSel++;
+      if (menuSel >= 6) menuSel = 5;
+    }
+    if (nav::NavKey::instance().leftPressed()) {
+      uiState = UiState::Home;
+    }
+    if (nav::NavKey::instance().okPressed()) {
+      // Rebuild dynamic menu items each time
+      char menuItemBufs[6][32];
+      const char* menuItems[6];
+      for (int i = 0; i < 6; i++) menuItems[i] = menuItemBufs[i];
+      bool wifiOk = WiFi.status() == WL_CONNECTED;
+      bool mqttOk = mqtt::Client::instance().connected();
+      snprintf(menuItemBufs[0], 32, "WiFi: %s", wifiOk ? "connected" : "offline");
+      snprintf(menuItemBufs[1], 32, "MQTT: %s", mqttOk ? "connected" : "offline");
+      snprintf(menuItemBufs[2], 32, "%s", ch1Relay ? "Channel 1: ON" : "Channel 1: OFF");
+      snprintf(menuItemBufs[3], 32, "%s", ch2Relay ? "Channel 2: ON" : "Channel 2: OFF");
+      snprintf(menuItemBufs[4], 32, "%s", display::Display::instance().backlight() ? "Backlight: ON" : "Backlight: OFF");
+      snprintf(menuItemBufs[5], 32, "%s", "Reset");
 
-  // LED heartbeat
-  static uint32_t lastLedMs = 0;
-  if (millis() - lastLedMs > 1000) {
-    lastLedMs = millis();
-    bool connected = mqtt::Client::instance().connected();
-    bool wifiOk = WiFi.status() == WL_CONNECTED;
-    if (!wifiOk) digitalWrite(PIN_LED, !digitalRead(PIN_LED));
-    else if (!connected) digitalWrite(PIN_LED, HIGH);
-    else digitalWrite(PIN_LED, LOW);
+      switch (menuSel) {
+        case 0:
+        case 1:
+          // display-only, re-render current menu with refreshed status
+          break;
+        case 2:
+          ch1Relay = !ch1Relay;
+          digitalWrite(PIN_RELAY1, ch1Relay ? HIGH : LOW);
+          mqtt::Client::instance().publishState(lastData, ch1Relay, ch2Relay, (int)WiFi.RSSI());
+          snprintf(menuItemBufs[2], 32, "%s", ch1Relay ? "Channel 1: ON" : "Channel 1: OFF");
+          break;
+        case 3:
+          ch2Relay = !ch2Relay;
+          digitalWrite(PIN_RELAY2, ch2Relay ? HIGH : LOW);
+          mqtt::Client::instance().publishState(lastData, ch1Relay, ch2Relay, (int)WiFi.RSSI());
+          snprintf(menuItemBufs[3], 32, "%s", ch2Relay ? "Channel 2: ON" : "Channel 2: OFF");
+          break;
+        case 4:
+          display::Display::instance().setBacklight(!display::Display::instance().backlight());
+          snprintf(menuItemBufs[4], 32, "%s", display::Display::instance().backlight() ? "Backlight: ON" : "Backlight: OFF");
+          break;
+        case 5:
+          cfg::Config::instance().factoryReset();
+          ESP.restart();
+          break;
+      }
+      display::Display::instance().renderMenu(menuSel, menuItems, 6);
+      return;  // menu rendered, skip below
+    }
+    // Render menu on each loop iteration while in menu state
+    {
+      char menuItemBufs[6][32];
+      const char* menuItems[6];
+      for (int i = 0; i < 6; i++) menuItems[i] = menuItemBufs[i];
+      bool wifiOk = WiFi.status() == WL_CONNECTED;
+      bool mqttOk = mqtt::Client::instance().connected();
+      snprintf(menuItemBufs[0], 32, "WiFi: %s", wifiOk ? "connected" : "offline");
+      snprintf(menuItemBufs[1], 32, "MQTT: %s", mqttOk ? "connected" : "offline");
+      snprintf(menuItemBufs[2], 32, "%s", ch1Relay ? "Channel 1: ON" : "Channel 1: OFF");
+      snprintf(menuItemBufs[3], 32, "%s", ch2Relay ? "Channel 2: ON" : "Channel 2: OFF");
+      snprintf(menuItemBufs[4], 32, "%s", display::Display::instance().backlight() ? "Backlight: ON" : "Backlight: OFF");
+      snprintf(menuItemBufs[5], 32, "%s", "Reset");
+      display::Display::instance().renderMenu(menuSel, menuItems, 6);
+    }
   }
 }

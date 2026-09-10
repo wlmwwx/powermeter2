@@ -9,7 +9,7 @@ static const int8_t PIN_NAV_OK    = 4;
 namespace nav {
 
 constexpr uint8_t DEBOUNCE_MS = 30;
-constexpr uint8_t COMBO_MS    = 5000;
+constexpr uint16_t COMBO_MS    = 5000;
 
 struct KeyState {
   uint8_t pin;
@@ -18,13 +18,16 @@ struct KeyState {
   bool prevStable = false;
   uint32_t changeMs = 0;
   uint32_t pressStartMs = 0;
+
+  KeyState() = default;
+  explicit KeyState(uint8_t p) : pin(p) {}
 };
 
-static KeyState kUp   { PIN_NAV_UP };
-static KeyState kDown { PIN_NAV_DOWN };
-static KeyState kLeft { PIN_NAV_LEFT };
-static KeyState kRight{ PIN_NAV_RIGHT };
-static KeyState kOk   { PIN_NAV_OK };
+static KeyState kUp   ( PIN_NAV_UP );
+static KeyState kDown ( PIN_NAV_DOWN );
+static KeyState kLeft ( PIN_NAV_LEFT );
+static KeyState kRight( PIN_NAV_RIGHT );
+static KeyState kOk   ( PIN_NAV_OK );
 
 static bool edgeUp = false, edgeDown = false, edgeLeft = false, edgeRight = false, edgeOk = false;
 static bool comboOkUpLongFired = false;
