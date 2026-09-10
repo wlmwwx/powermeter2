@@ -1,6 +1,6 @@
 # Powermeter2 — Dual-Channel Smart Power Meter
 
-ESP32-C3 + HT7017 dual-channel AC power meter with WiFi provisioning, MQTT reporting, and local LCD + 5-way keypad control.
+ESP32-C3 + HT7017 dual-channel AC power meter with WiFi provisioning, MQTT reporting, local LCD with 3-page display, and 5-way keypad control.
 
 See `docs/PRD.md` for product requirements and `docs/superpowers/plans/` for the implementation plan.
 
@@ -12,6 +12,7 @@ See `docs/PRD.md` for product requirements and `docs/superpowers/plans/` for the
 - MQTT command subscription for relay control (2 channels)
 - Persistent calibration (NVS) and energy snapshot (LittleFS)
 - ST7735 128x160 SPI LCD for live metering display
+- 3-page LCD (CH1 / CH2 / System) with dirty-region redraw — flicker-free at 2 s cadence
 - 5-way navigation keypad with on-screen menu (relay toggle, status, reset)
 - OK + UP hold (>5s) for factory reset
 
@@ -59,13 +60,17 @@ Default `prefix` is `powermeter`. Device ID is auto-generated from MAC.
 
 ## Display & Controls
 
-The 128x160 ST7735 LCD shows live metering. The 5-way keypad navigates the on-screen menu.
+The 128x160 ST7735 LCD has 3 switchable home pages. The 5-way keypad navigates pages and the on-screen menu.
 
-**Home screen:** U, I1/I2, P1/P2, EP1/EP2, F, CH1/CH2 relay state, "OK=menu" hint at bottom.
+**Home pages (LEFT/RIGHT to cycle, wraps both ways):**
+- **Page 1 — CH1:** U, I1, P1, EP1
+- **Page 2 — CH2:** U, I2, P2, EP2
+- **Page 3 — System:** F (frequency), CH1/CH2 relay state, WiFi RSSI, MQTT connection status
+- The page indicator at the bottom shows the current page (e.g. `< ch1 | 2/3 | sys >`).
 
-**Menu items (in order):** WiFi status / MQTT status / Channel 1 toggle / Channel 2 toggle / Backlight toggle / Reset
+**Menu (press OK from any home page):** WiFi status / MQTT status / Channel 1 toggle / Channel 2 toggle / Backlight toggle / Reset
 
-**Keypad actions:** UP/DOWN scroll selection, OK select, LEFT back to home.
+**Keypad actions:** UP/DOWN scroll menu selection, OK select, LEFT back to home.
 
 **Factory reset:** from any screen, hold OK + UP for >5 seconds (device reboots into SoftAP).
 
