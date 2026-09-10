@@ -47,6 +47,10 @@ bool Display::begin() {
   }
   memset(_lastText, 0, sizeof(_lastText));
 
+  _menuDirty = true;
+  _lastMenuSel = -1;
+  memset(_lastMenuText, 0, sizeof(_lastMenuText));
+
   return true;
 }
 
@@ -202,28 +206,52 @@ bool Display::drawRow(int page, int rowIdx, int x, int y, uint16_t color,
 }
 
 void Display::renderMenu(int selectedIdx, const char* const* items, int count) {
-  _tft.fillScreen(ST7735_BLACK);
-
-  // Title
-  _tft.setTextSize(1);
-  _tft.setTextColor(ST7735_WHITE);
-  _tft.setCursor(0, 4);
-  _tft.println("Menu");
-
   const int rowHeight = 14;
   const int startY = 24;
 
-  for (int i = 0; i < count && i < 8; i++) {
-    _tft.setCursor(0, startY + i * rowHeight);
-    if (i == selectedIdx) {
-      _tft.setTextColor(ST7735_GREEN);
-      _tft.print("> ");
-    } else {
-      _tft.setTextColor(ST7735_WHITE);
-      _tft.print("  ");
+  // Selection changed: invalidate both old and new highlight rows so they redraw with correct color.
+  if (_lastMenuSel != selectedIdx) {
+    if (_lastMenuSel >= 0 && _lastMenuSel < 6) {
+      _lastMenuText[_lastMenuSel][0] = '\0';  // force redraw of old highlighted row
     }
-    _tft.println(items[i]);
+    if (selectedIdx >= 0 && selectedIdx < 6) {
+      _lastMenuText[selectedIdx][0] = '\0';   // force redraw of new highlighted row
+    }
+    _lastMenuSel = selectedIdx;
   }
+
+  // First call (or after invalidate): full clear + title
+  if (_menuDirty) {
+    _tft.fillScreen(ST7735_BLACK);
+    _tft.setTextSize(1);
+    _tft.setTextColor(ST7735_WHITE);
+    _tft.setCursor(0, 4);
+    _tft.println("Menu");
+    _menuDirty = false;
+  }
+
+  for (int i = 0; i < count && i < 6; i++) {
+    if (!items[i]) continue;  // safety
+    char prefixed[36];
+    if (i == selectedIdx) {
+      snprintf(prefixed, sizeof(prefixed), "> %s", items[i]);
+    } else {
+      snprintf(prefixed, sizeof(prefixed), "  %s", items[i]);
+    }
+    uint16_t color = (i == selectedIdx) ? ST7735_GREEN : ST7735_WHITE;
+    drawMenuRow(i, 0, startY + i * rowHeight, color, prefixed);
+  }
+}
+
+bool Display::drawMenuRow(int rowIdx, int x, int y, uint16_t color, const char* text) {
+  if (strcmp(text, _lastMenuText[rowIdx]) == 0) return false;
+  _tft.fillRect(x, y, 128, 14, ST7735_BLACK);  // clear 14 px row band
+  _tft.setCursor(x, y);
+  _tft.setTextColor(color);
+  _tft.print(text);
+  strncpy(_lastMenuText[rowIdx], text, sizeof(_lastMenuText[rowIdx]) - 1);
+  _lastMenuText[rowIdx][sizeof(_lastMenuText[rowIdx]) - 1] = '\0';
+  return true;
 }
 
 void Display::setBacklight(bool on) {

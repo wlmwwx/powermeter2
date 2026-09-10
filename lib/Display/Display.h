@@ -33,6 +33,14 @@ class Display {
   bool _pageDirty[kPageCount];
   char _lastText[kPageCount][4][24];
 
+  // Menu dirty-row state
+  bool _menuDirty = true;
+  int _lastMenuSel = -1;
+  char _lastMenuText[6][32] = {};
+
+  // Helper
+  bool drawMenuRow(int rowIdx, int x, int y, uint16_t color, const char* text);
+
   // Helpers
   void drawTitle(PageId page);
   void drawDivider();
