@@ -1,6 +1,6 @@
 # Powermeter2 — Dual-Channel Smart Power Meter
 
-ESP32-C3 + HT7017 dual-channel AC power meter with WiFi provisioning, MQTT reporting, with local LCD + 5-way keypad control.
+ESP32-C3 + HT7017 dual-channel AC power meter with WiFi provisioning, MQTT reporting, and local LCD + 5-way keypad control.
 
 See `docs/PRD.md` for product requirements and `docs/superpowers/plans/` for the implementation plan.
 
