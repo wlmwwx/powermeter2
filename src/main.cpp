@@ -29,6 +29,7 @@ enum class UiState { Home, Menu };
 UiState uiState = UiState::Home;
 int menuSel = 0;
 bool firstRender = true;
+int currentPage = 0;
 
 void onMqttCmd(const String& payload) {
   JsonDocument doc;
@@ -100,7 +101,7 @@ void loop() {
   }
 
   // Meter + display update once per second
-  if (millis() - lastMeterUpdateMs > 1000) {
+  if (millis() - lastMeterUpdateMs > 2000) {
     lastMeterUpdateMs = millis();
 
     if (meterObj.update(&lastData)) {
@@ -114,7 +115,11 @@ void loop() {
     }
 
     if (uiState == UiState::Home) {
-      display::Display::instance().renderHome(lastData, ch1Relay, ch2Relay);
+      display::Display::instance().renderHome(
+        (display::Display::PageId)currentPage,
+        lastData, ch1Relay, ch2Relay,
+        (int)WiFi.RSSI(),
+        mqtt::Client::instance().connected());
     }
   }
 
@@ -136,6 +141,14 @@ void loop() {
 
   // UI state machine
   if (uiState == UiState::Home) {
+    if (nav::NavKey::instance().leftPressed()) {
+      currentPage--;
+      if (currentPage < 0) currentPage = 2;  // wrap 0→2
+    }
+    if (nav::NavKey::instance().rightPressed()) {
+      currentPage++;
+      if (currentPage > 2) currentPage = 0;  // wrap 2→0
+    }
     if (nav::NavKey::instance().okPressed()) {
       uiState = UiState::Menu;
       menuSel = 0;
