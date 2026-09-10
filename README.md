@@ -1,6 +1,6 @@
 # Powermeter2 — Dual-Channel Smart Power Meter
 
-ESP32-C3 + HT7017 dual-channel AC power meter with WiFi provisioning and MQTT reporting.
+ESP32-C3 + HT7017 dual-channel AC power meter with WiFi provisioning, MQTT reporting, with local LCD + 5-way keypad control.
 
 See `docs/PRD.md` for product requirements and `docs/superpowers/plans/` for the implementation plan.
 
@@ -11,7 +11,9 @@ See `docs/PRD.md` for product requirements and `docs/superpowers/plans/` for the
 - MQTT periodic state publishing with availability LWT
 - MQTT command subscription for relay control (2 channels)
 - Persistent calibration (NVS) and energy snapshot (LittleFS)
-- Long-press key (>5s) for factory reset
+- ST7735 128x160 SPI LCD for live metering display
+- 5-way navigation keypad with on-screen menu (relay toggle, status, reset)
+- OK + UP hold (>5s) for factory reset
 
 ## Build
 
@@ -55,16 +57,37 @@ Default `prefix` is `powermeter`. Device ID is auto-generated from MAC.
 }
 ```
 
+## Display & Controls
+
+The 128x160 ST7735 LCD shows live metering. The 5-way keypad navigates the on-screen menu.
+
+**Home screen:** U, I1/I2, P1/P2, EP1/EP2, F, CH1/CH2 relay state, "OK=menu" hint at bottom.
+
+**Menu items (in order):** WiFi status / MQTT status / Channel 1 toggle / Channel 2 toggle / Backlight toggle / Reset
+
+**Keypad actions:** UP/DOWN scroll selection, OK select, LEFT back to home.
+
+**Factory reset:** from any screen, hold OK + UP for >5 seconds (device reboots into SoftAP).
+
 ## Pin map
 
 | Pin | Function |
 |-----|----------|
+| GPIO 2 | LCD SCLK |
+| GPIO 3 | LCD MOSI |
+| GPIO 4 | Nav: OK |
+| GPIO 5 | Nav: LEFT |
+| GPIO 6 | LCD DC |
+| GPIO 7 | LCD CS |
+| GPIO 8 | Nav: UP |
+| GPIO 9 | Nav: RIGHT |
+| GPIO 10 | LCD RST |
+| GPIO 11 | LCD Backlight |
+| GPIO 12 | Relay 1 (HIGH = on) |
+| GPIO 13 | Nav: DOWN |
+| GPIO 18 | Relay 2 (HIGH = on, USB-CDC warning) |
 | GPIO 20 | HT7017 UART RX (ESP32-C3 RX) |
 | GPIO 21 | HT7017 UART TX |
-| GPIO 8 | Status LED |
-| GPIO 2 | Relay 1 |
-| GPIO 3 | Relay 2 |
-| GPIO 9 | Key (input pull-up) |
 
 HT7017 UART: 4800 baud, 8E1.
 
@@ -79,6 +102,8 @@ lib/Config/                  NVS-backed settings (wifi/mqtt/device/cali)
 lib/EnergyStore/             LittleFS snapshot of cumulative energy
 lib/Provisioning/            SoftAP + Web provisioning HTTP server
 lib/MqttClient/              PubSubClient wrapper (state/availability/cmd)
+lib/Display/                 ST7735 LCD wrapper
+lib/NavKey/                  5-way debounced nav + OK+UP combo
 src/main.cpp                 Orchestrator: setup() + loop()
 platformio.ini               PlatformIO + Arduino for ESP32-C3
 ```
