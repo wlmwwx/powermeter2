@@ -1,6 +1,6 @@
 # Powermeter2 — Dual-Channel Smart Power Meter
 
-ESP32-C3 + HT7017 dual-channel AC power meter with WiFi provisioning, MQTT reporting, local LCD with 3-page display, and 5-way keypad control.
+ESP32-C3 + HT7017 dual-channel AC power meter with WiFi provisioning, MQTT reporting, and flicker-free local LCD with 3-page display + 5-way keypad control.
 
 See `docs/PRD.md` for product requirements and `docs/superpowers/plans/` for the implementation plan.
 
@@ -13,6 +13,7 @@ See `docs/PRD.md` for product requirements and `docs/superpowers/plans/` for the
 - Persistent calibration (NVS) and energy snapshot (LittleFS)
 - ST7735 128x160 SPI LCD for live metering display
 - 3-page LCD (CH1 / CH2 / System) with dirty-region redraw — flicker-free at 2 s cadence
+- Flicker-free menu with event-driven dirty-row redraw — zero SPI writes when nothing changes
 - 5-way navigation keypad with on-screen menu (relay toggle, status, reset)
 - OK + UP hold (>5s) for factory reset
 
@@ -69,6 +70,8 @@ The 128x160 ST7735 LCD has 3 switchable home pages. The 5-way keypad navigates p
 - The page indicator at the bottom shows the current page (e.g. `< ch1 | 2/3 | sys >`).
 
 **Menu (press OK from any home page):** WiFi status / MQTT status / Channel 1 toggle / Channel 2 toggle / Backlight toggle / Reset
+
+Menu rendering is event-driven: rows only repaint when their text changes (e.g. toggling a relay, changing backlight). The display stays completely static until you press a key.
 
 **Keypad actions:** UP/DOWN scroll menu selection, OK select, LEFT back to home.
 
